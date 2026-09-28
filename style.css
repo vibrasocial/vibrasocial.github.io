@@ -20,6 +20,8 @@
   }
 }
 * { box-sizing: border-box; }
+/* `hidden` sempre vence — sem isso, `.center { display: grid }` deixava a tela de login visível por cima do painel. */
+[hidden] { display: none !important; }
 body {
   margin: 0;
   background: var(--bg);

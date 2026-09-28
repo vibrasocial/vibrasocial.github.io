@@ -13,9 +13,9 @@
 </head>
 <body>
   <!--
-    Painel admin da Vibra (D112) — só web. Qualquer um pode abrir esta
-    página, mas nada funciona sem ser admin: toda ação chama uma função do
-    banco que começa com assert_admin() (tabela app_admins). Conta comum
+    Painel admin da Vibra (D112, v2 em D114) — só web. Qualquer um pode abrir
+    esta página, mas nada funciona sem ser admin: toda ação chama uma função
+    do banco que começa com assert_admin() (tabela app_admins). Conta comum
     que fizer login aqui é desconectada na hora.
   -->
   <section id="login" class="center" hidden>
@@ -34,24 +34,51 @@
       <div class="brand"><img class="dot" src="/icon.png" alt="" /> Vibra Admin</div>
       <nav id="tabs" role="tablist">
         <button data-tab="overview" class="active" role="tab">Visão geral</button>
-        <button data-tab="reports" role="tab">Denúncias</button>
+        <button data-tab="reports" role="tab">Denúncias <span class="badge" id="reportsBadge" hidden></span></button>
+        <button data-tab="content" role="tab">Conteúdo</button>
         <button data-tab="users" role="tab">Usuários</button>
+        <button data-tab="notices" role="tab">Avisos</button>
         <button data-tab="flags" role="tab">Funções</button>
         <button data-tab="security" role="tab">Segurança</button>
+        <button data-tab="history" role="tab">Histórico</button>
       </nav>
       <div class="me"><span id="meEmail" class="muted"></span> <button class="btn ghost sm" id="logout">Sair</button></div>
     </header>
 
     <main class="wrap">
       <section data-panel="overview">
-        <div class="head"><h2>Visão geral</h2><button class="btn ghost sm" data-reload="overview">Atualizar</button></div>
+        <div class="head">
+          <h2>Visão geral</h2>
+          <div class="actions">
+            <select id="rangeSel" aria-label="Período">
+              <option value="7">7 dias</option>
+              <option value="30" selected>30 dias</option>
+              <option value="90">90 dias</option>
+            </select>
+            <button class="btn ghost sm" data-reload="overview">Atualizar</button>
+          </div>
+        </div>
         <div class="stats" id="stats"></div>
+        <div class="charts" id="charts"></div>
+        <details class="card tableview">
+          <summary>Ver os números em tabela</summary>
+          <div id="seriesTable"></div>
+        </details>
       </section>
 
       <section data-panel="reports" hidden>
         <div class="head"><h2>Denúncias</h2><button class="btn ghost sm" data-reload="reports">Atualizar</button></div>
         <p class="muted">Mais denunciado primeiro. <b>Manter</b> limpa as denúncias; <b>Remover</b> apaga o conteúdo (usuário: suspensão de 30 dias).</p>
         <div id="reportList" class="list"></div>
+      </section>
+
+      <section data-panel="content" hidden>
+        <div class="head"><h2>Conteúdo</h2></div>
+        <form id="contentSearch" class="searchbar">
+          <input id="contentQuery" placeholder="Buscar por legenda, @ ou nome (vazio = mais recentes)" />
+          <button class="btn" type="submit">Buscar</button>
+        </form>
+        <div id="contentList" class="list"></div>
       </section>
 
       <section data-panel="users" hidden>
@@ -61,6 +88,29 @@
           <button class="btn" type="submit">Buscar</button>
         </form>
         <div id="userList" class="list"></div>
+      </section>
+
+      <section data-panel="notices" hidden>
+        <div class="head"><h2>Avisos</h2></div>
+        <div class="grid2">
+          <form class="card stack" id="broadcastForm">
+            <h3>Notificação pra todo mundo</h3>
+            <p class="muted small">Chega como notificação "Vibra" (com push no celular) pra todas as contas. Use pra novidades importantes — sem exagero.</p>
+            <textarea id="broadcastText" rows="4" maxlength="500" placeholder="Ex.: Chegou a capa em áudios e enquetes! Atualize o app pra testar."></textarea>
+            <div class="row-between"><span class="muted small" id="broadcastCount">0/500</span><button class="btn" type="submit">Enviar pra todos</button></div>
+          </form>
+          <form class="card stack" id="bannerForm">
+            <h3>Aviso no topo do feed</h3>
+            <p class="muted small">Fica fixo no topo do feed de todo mundo até você desligar. Bom pra manutenção programada ou campanha.</p>
+            <textarea id="bannerText" rows="4" maxlength="200" placeholder="Ex.: Manutenção hoje às 23h, volta em 10 minutos."></textarea>
+            <div class="row-between">
+              <label class="switch-label"><span class="switch"><input type="checkbox" id="bannerOn" /><span></span></span> Mostrar</label>
+              <button class="btn" type="submit">Salvar aviso</button>
+            </div>
+          </form>
+        </div>
+        <h3 class="section-title">Enviados</h3>
+        <div id="broadcastList" class="list"></div>
       </section>
 
       <section data-panel="flags" hidden>
@@ -74,9 +124,27 @@
         <p class="muted">Tabelas sem RLS, tabelas com RLS mas sem nenhuma política, e funções <code>security definer</code> sem <code>search_path</code> fixo.</p>
         <div id="auditList" class="list"></div>
       </section>
+
+      <section data-panel="history" hidden>
+        <div class="head"><h2>Histórico de ações</h2><button class="btn ghost sm" data-reload="history">Atualizar</button></div>
+        <p class="muted">Tudo que foi feito pelo painel, por qualquer admin.</p>
+        <div id="historyList" class="list"></div>
+      </section>
     </main>
   </div>
 
+  <dialog id="userDialog" aria-labelledby="udName">
+    <div class="dlg-head">
+      <div>
+        <h2 id="udName"></h2>
+        <div class="muted" id="udSub"></div>
+      </div>
+      <button class="btn ghost sm" id="udClose" aria-label="Fechar">Fechar</button>
+    </div>
+    <div id="udBody"></div>
+  </dialog>
+
+  <div id="tip" role="tooltip" hidden></div>
   <div id="toast" role="status"></div>
 
   <script src="/config.js"></script>
