@@ -499,6 +499,7 @@
         authorRow(c.author, `${c.where}${c.recipient ? " com @" + String(c.recipient.handle).replace(/^@/, "") : ""} · ${fmtDate(c.created_at)}${c.deleted_at ? " · já apagada" : ""}`),
         block("Mensagem completa", fullText(c.text)),
         c.audio_url ? block("Áudio da mensagem", privateAudio(c.audio_url)) : null,
+        chatMediaBlock(c.id),
         c.shared_post ? block("Publicação compartilhada", fullText(c.shared_post.caption || JSON.stringify(c.shared_post))) : null,
         c.context && c.context.length
           ? block("Conversa em volta (a denunciada em vermelho)", el("div", { class: "ctx" },
@@ -790,6 +791,8 @@
             el("div", { class: "log-line" }, el("span", { class: "when" }, fmtDate(p.created_at)),
               el("span", { class: "tag" }, POST_TYPES[p.type] || p.type), p.caption || "(sem legenda)")))
         : el("p", { class: "muted small" }, "Nenhuma."),
+      el("h3", { class: "section-title" }, "Prints registrados (últimos 6 meses)"),
+      screenshotsBlock(id),
       el("h3", { class: "section-title" }, "Ações do painel nesta conta"),
       u.log.length
         ? el("div", {}, ...u.log.map((l) => el("div", { class: "log-line" }, el("span", { class: "when" }, fmtDate(l.created_at)), describe(l.action, l.detail))))
@@ -888,6 +891,58 @@
       audio.src = data?.signedUrl || url;
     });
     return audio;
+  }
+
+  // Foto/vídeo de mensagem (D122): bucket privado, link de 10 min. Mostra
+  // também quem abriu (visualização única) e os prints registrados dela.
+  function chatMediaBlock(messageId) {
+    const box = el("div", {});
+    if (!messageId) return box;
+    db.rpc("admin_message_media", { p_message_id: messageId }).then(async ({ data, error }) => {
+      if (error || !data) return;
+      const parts = [];
+      if (data.path) {
+        const title = `${data.kind === "video" ? "Vídeo" : "Foto"} da mensagem${data.view_once ? " · visualização única" : ""}`;
+        if (data.purged_at) {
+          parts.push(block(title, el("p", { class: "muted small" }, `Arquivo apagado em ${fmtDate(data.purged_at)} (passou dos 30 dias).`)));
+        } else {
+          const { data: signed } = await db.storage.from("chat-media").createSignedUrl(data.path, 600);
+          const url = signed?.signedUrl;
+          parts.push(block(title,
+            url
+              ? data.kind === "video"
+                ? el("div", { class: "media" }, el("video", { src: url, controls: true, preload: "metadata" }))
+                : el("div", { class: "media" }, el("a", { href: url, target: "_blank", rel: "noopener" }, el("img", { src: url, alt: "Imagem denunciada" })))
+              : el("p", { class: "muted small" }, "Não deu para abrir o arquivo."),
+            data.caption ? fullText(data.caption) : null));
+        }
+      }
+      if (data.opened_by && data.opened_by.length) {
+        parts.push(block("Quem abriu", el("div", {}, ...data.opened_by.map((o) =>
+          el("div", { class: "log-line" }, el("span", { class: "when" }, fmtDate(o.at)), o.handle || "(conta apagada)")))));
+      }
+      if (data.screenshots && data.screenshots.length) {
+        parts.push(block("Prints desta mensagem", el("div", {}, ...data.screenshots.map((o) =>
+          el("div", { class: "log-line" }, el("span", { class: "when" }, fmtDate(o.at)), `${o.handle || "(conta apagada)"} · IP ${o.ip || "—"}`)))));
+      }
+      box.replaceChildren(...parts);
+    });
+    return box;
+  }
+
+  // Prints registrados de uma conta (D122) — pra pedido judicial/policial.
+  function screenshotsBlock(userId) {
+    const box = el("div", {}, el("p", { class: "muted small" }, "Carregando…"));
+    db.rpc("admin_screenshots", { p_user: userId, p_conversation: null, p_limit: 50 }).then(({ data, error }) => {
+      if (error) return box.replaceChildren(el("p", { class: "muted small" }, "Indisponível — rode a migração 0076 no Supabase."));
+      const ctx = { dm: "conversa direta", circulo: "Círculo", vibe: "Vibe", visualizacao_unica: "visualização única", outro: "outro" };
+      box.replaceChildren(
+        (data || []).length
+          ? el("div", {}, ...data.map((s) => el("div", { class: "log-line" }, el("span", { class: "when" }, fmtDate(s.created_at)),
+              `${ctx[s.context] || s.context} · IP ${s.ip || "—"}`)))
+          : el("p", { class: "muted small" }, "Nenhum."));
+    });
+    return box;
   }
 
   // ---------- Erros (D117) ----------
