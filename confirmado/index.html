@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>E-mail confirmado — Vibra</title>
+  <meta name="description" content="Confirmação de e-mail da Vibra." />
+  <meta name="theme-color" content="#C1FF00" />
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <!-- Destino do link de confirmação de cadastro (emailRedirectTo no app). O
+       Supabase manda o erro no fragmento (#error=...) quando o link venceu. -->
+  <main class="doc">
+    <a class="doc-brand" href="/"><img src="/icon.png" alt="" /> Vibra</a>
+    <h1 id="t">E-mail confirmado</h1>
+    <p id="m">Tudo certo. Volte ao app da Vibra e entre com seu e-mail e senha.</p>
+  </main>
+  <script>
+    var h = new URLSearchParams(location.hash.slice(1));
+    var q = new URLSearchParams(location.search);
+    if (h.get("error") || q.get("error")) {
+      document.getElementById("t").textContent = "Esse link não vale mais";
+      document.getElementById("m").textContent =
+        "O link de confirmação venceu ou já foi usado. No app, tente entrar: se a conta ainda não estiver confirmada, toque em “Reenviar link de confirmação”.";
+    }
+  </script>
+</body>
+</html>
