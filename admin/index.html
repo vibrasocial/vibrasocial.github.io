@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>Vibra Admin</title>
+  <meta name="theme-color" content="#002776" />
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="/admin/admin.css" />
+</head>
+<body>
+  <!--
+    Painel admin da Vibra (D112) — só web. Qualquer um pode abrir esta
+    página, mas nada funciona sem ser admin: toda ação chama uma função do
+    banco que começa com assert_admin() (tabela app_admins). Conta comum
+    que fizer login aqui é desconectada na hora.
+  -->
+  <section id="login" class="center" hidden>
+    <form class="box card stack" id="loginForm">
+      <div class="logo">V</div>
+      <h1>Vibra Admin</h1>
+      <input type="email" id="email" placeholder="E-mail" autocomplete="username" required />
+      <input type="password" id="password" placeholder="Senha" autocomplete="current-password" required />
+      <button class="btn" type="submit" id="loginBtn">Entrar</button>
+      <p class="err" id="loginErr" role="alert"></p>
+    </form>
+  </section>
+
+  <div id="app" hidden>
+    <header class="top">
+      <div class="brand"><span class="dot">V</span> Vibra Admin</div>
+      <nav id="tabs" role="tablist">
+        <button data-tab="overview" class="active" role="tab">Visão geral</button>
+        <button data-tab="reports" role="tab">Denúncias</button>
+        <button data-tab="users" role="tab">Usuários</button>
+        <button data-tab="flags" role="tab">Funções</button>
+        <button data-tab="security" role="tab">Segurança</button>
+      </nav>
+      <div class="me"><span id="meEmail" class="muted"></span> <button class="btn ghost sm" id="logout">Sair</button></div>
+    </header>
+
+    <main class="wrap">
+      <section data-panel="overview">
+        <div class="head"><h2>Visão geral</h2><button class="btn ghost sm" data-reload="overview">Atualizar</button></div>
+        <div class="stats" id="stats"></div>
+      </section>
+
+      <section data-panel="reports" hidden>
+        <div class="head"><h2>Denúncias</h2><button class="btn ghost sm" data-reload="reports">Atualizar</button></div>
+        <p class="muted">Mais denunciado primeiro. <b>Manter</b> limpa as denúncias; <b>Remover</b> apaga o conteúdo (usuário: suspensão de 30 dias).</p>
+        <div id="reportList" class="list"></div>
+      </section>
+
+      <section data-panel="users" hidden>
+        <div class="head"><h2>Usuários</h2></div>
+        <form id="userSearch" class="searchbar">
+          <input id="userQuery" placeholder="Buscar por nome, @usuário ou e-mail (vazio = mais recentes)" />
+          <button class="btn" type="submit">Buscar</button>
+        </form>
+        <div id="userList" class="list"></div>
+      </section>
+
+      <section data-panel="flags" hidden>
+        <div class="head"><h2>Funções da rede</h2><button class="btn ghost sm" data-reload="flags">Atualizar</button></div>
+        <p class="muted">Desligar uma função trava no banco na hora, pra todo mundo (menos admins). O app recebe a mudança ao vivo. A mensagem aparece pra quem tentar usar.</p>
+        <div id="flagList" class="list"></div>
+      </section>
+
+      <section data-panel="security" hidden>
+        <div class="head"><h2>Auditoria de segurança</h2><button class="btn ghost sm" data-reload="security">Rodar de novo</button></div>
+        <p class="muted">Tabelas sem RLS, tabelas com RLS mas sem nenhuma política, e funções <code>security definer</code> sem <code>search_path</code> fixo.</p>
+        <div id="auditList" class="list"></div>
+      </section>
+    </main>
+  </div>
+
+  <div id="toast" role="status"></div>
+
+  <script src="/config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/admin/admin.js"></script>
+</body>
+</html>

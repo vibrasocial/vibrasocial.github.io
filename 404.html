@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Vibra</title>
+  <meta name="theme-color" content="#C1FF00" />
+  <link rel="stylesheet" href="/style.css" />
+  <style>
+    .result { text-align: left; }
+    .row { margin-top: 10px; }
+    .row small { display: block; color: var(--muted); font-size: 12px; }
+    .ok { color: var(--ok); font-weight: 700; }
+    .bad { color: var(--danger); font-weight: 600; }
+    form { display: flex; gap: 8px; }
+    form input { text-transform: uppercase; letter-spacing: 1px; }
+  </style>
+</head>
+<body>
+  <!--
+    Links https da Vibra (D111). Todo caminho que não é arquivo cai aqui
+    (GitHub Pages serve o 404.html). Com o app instalado, o Android abre
+    o app direto (App Links) e esta página nem aparece. Sem o app:
+    - /certificado/<código>  → valida o certificado aqui mesmo, pela web;
+    - /perfil, /eventos, /convite, /vibes, /post → botão "Abrir no app".
+  -->
+  <main class="center">
+    <div class="box stack" id="root">
+      <div class="logo">V</div>
+    </div>
+  </main>
+  <script src="/config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    const root = document.getElementById("root");
+    const parts = location.pathname.replace(/^\/+|\/+$/g, "").split("/");
+    const section = parts[0];
+    const KNOWN = {
+      perfil: "Abra este perfil no app da Vibra.",
+      eventos: "Abra este evento no app da Vibra.",
+      convite: "Você foi convidado pra Vibra! Crie sua conta pelo app e vocês já começam como amigos.",
+      vibes: "Abra esta vibe no app da Vibra.",
+      post: "Abra esta publicação no app da Vibra.",
+    };
+
+    function el(tag, attrs, ...children) {
+      const n = document.createElement(tag);
+      for (const [k, v] of Object.entries(attrs || {})) n.setAttribute(k, v);
+      for (const c of children) n.append(c);
+      return n;
+    }
+
+    if (section === "certificado") {
+      renderCertificate(parts[1] && parts[1] !== "validar" ? parts[1] : "");
+    } else if (KNOWN[section]) {
+      root.append(
+        el("h1", {}, "Vibra"),
+        el("p", { class: "muted" }, KNOWN[section]),
+        el("p", {}, el("a", { class: "btn lime", href: "vibra://" + parts.join("/") }, "Abrir no app"))
+      );
+    } else {
+      root.append(el("h1", {}, "Página não encontrada"), el("p", {}, el("a", { class: "btn ghost", href: "/" }, "Ir pro início")));
+    }
+
+    function renderCertificate(initial) {
+      const input = el("input", { placeholder: "Código de 10 caracteres", maxlength: "14", "aria-label": "Código do certificado" });
+      input.value = initial;
+      const out = el("div", { class: "card result", hidden: "" });
+      const form = el("form", {}, input, el("button", { class: "btn", type: "submit" }, "Validar"));
+      root.append(
+        el("h1", {}, "Validar certificado"),
+        el("p", { class: "muted" }, "Confira se um certificado de participação emitido pela Vibra é verdadeiro."),
+        form,
+        out
+      );
+      const db = window.supabase.createClient(VIBRA.supabaseUrl, VIBRA.supabaseKey);
+      async function check() {
+        const code = input.value.replace(/[^0-9a-f]/gi, "").toUpperCase();
+        out.hidden = false;
+        out.replaceChildren(el("span", { class: "muted" }, "Conferindo…"));
+        if (code.length !== 10) {
+          out.replaceChildren(el("span", { class: "bad" }, "O código tem 10 caracteres (letras A–F e números)."));
+          return;
+        }
+        const { data, error } = await db.rpc("verify_certificate", { p_code: code });
+        const r = (data || [])[0];
+        if (error || !r) {
+          out.replaceChildren(el("span", { class: "bad" }, "Código não encontrado. Esse certificado não foi emitido pela Vibra (ou o código foi digitado errado)."));
+          return;
+        }
+        const h = Math.floor(r.minutes / 60), m = r.minutes % 60;
+        const row = (label, value) => el("div", { class: "row" }, el("small", {}, label), String(value));
+        out.replaceChildren(
+          el("div", { class: "ok" }, "✓ Certificado válido"),
+          row("Participante", r.participant),
+          row("Evento", r.event_title),
+          row("Organização", r.organizer),
+          row("Data", new Date(r.event_date).toLocaleDateString("pt-BR")),
+          row("Horas registradas", h ? `${h}h${m ? " " + m + "min" : ""}` : `${m}min`)
+        );
+      }
+      form.addEventListener("submit", (e) => { e.preventDefault(); check(); });
+      if (initial) check();
+    }
+  </script>
+</body>
+</html>
