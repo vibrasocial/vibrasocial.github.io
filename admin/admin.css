@@ -154,3 +154,17 @@ nav button.alarm { animation: alarm .7s ease-in-out 6; }
 .author-row { display: flex; align-items: center; gap: 10px; }
 .author-row img { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; background: var(--border); }
 .dlg-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; position: sticky; bottom: -20px; background: var(--bg); padding: 12px 0; border-top: 1px solid var(--border); }
+
+/* Erros do app (D117) */
+.item .preview.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; }
+.item details.stack { margin-top: 8px; }
+.item details.stack summary { cursor: pointer; font-size: 13px; color: var(--muted); }
+.item details.stack pre { margin: 6px 0 0; max-height: 280px; overflow: auto; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px; }
+
+/* Uso do app (D118) — telas mais abertas em barras horizontais */
+.hbars { display: grid; gap: 6px; margin-top: 10px; }
+.hbar { display: grid; grid-template-columns: minmax(0, 9em) 1fr auto; align-items: center; gap: 8px; font-size: 13px; }
+.hbar-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hbar-track { height: 10px; border-radius: 0 4px 4px 0; overflow: hidden; }
+.hbar-fill { display: block; height: 100%; background: var(--bar); border-radius: 0 4px 4px 0; min-width: 2px; }
+.hbar-n { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 3ch; text-align: right; }

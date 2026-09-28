@@ -39,6 +39,7 @@
         <button data-tab="users" role="tab">Usuários</button>
         <button data-tab="notices" role="tab">Avisos</button>
         <button data-tab="flags" role="tab">Funções</button>
+        <button data-tab="errors" role="tab">Erros <span class="badge" id="errorsBadge" hidden></span></button>
         <button data-tab="security" role="tab">Segurança</button>
         <button data-tab="history" role="tab">Histórico</button>
       </nav>
@@ -59,6 +60,9 @@
           </div>
         </div>
         <div class="stats" id="stats"></div>
+        <h3 class="section-title">Uso do app</h3>
+        <div id="usage"></div>
+        <h3 class="section-title">Atividade</h3>
         <div class="charts" id="charts"></div>
         <details class="card tableview">
           <summary>Ver os números em tabela</summary>
@@ -121,6 +125,22 @@
         <div class="head"><h2>Funções da rede</h2><button class="btn ghost sm" data-reload="flags">Atualizar</button></div>
         <p class="muted">Desligar uma função trava no banco na hora, pra todo mundo (menos admins). O app recebe a mudança ao vivo. A mensagem aparece pra quem tentar usar.</p>
         <div id="flagList" class="list"></div>
+      </section>
+
+      <section data-panel="errors" hidden>
+        <div class="head">
+          <h2>Erros no app</h2>
+          <div class="actions">
+            <select id="errorsRange" aria-label="Período">
+              <option value="1">24 horas</option>
+              <option value="7" selected>7 dias</option>
+              <option value="30">30 dias</option>
+            </select>
+            <button class="btn ghost sm" data-reload="errors">Atualizar</button>
+          </div>
+        </div>
+        <p class="muted">Tudo que derrubou uma tela ou escapou sem tratamento no celular de alguém, agrupado pela mensagem. <b>Resolvido</b> apaga as ocorrências — se voltar a acontecer, reaparece. Guardamos 90 dias.</p>
+        <div id="errorList" class="list"></div>
       </section>
 
       <section data-panel="security" hidden>

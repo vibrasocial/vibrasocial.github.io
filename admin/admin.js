@@ -44,6 +44,36 @@
     ["messages", "Mensagens por dia"],
   ];
 
+  // Nome das telas no analytics (D118) — o app manda o caminho da rota.
+  const SCREENS = {
+    inicio: "Feed",
+    descobrir: "Descobrir",
+    criar: "Criar",
+    eventos: "Eventos",
+    perfil: "Meu perfil",
+    vibes: "Vibes",
+    "vibes/[id]": "Uma Vibe",
+    "perfil/[id]": "Perfil de alguém",
+    "post/[id]": "Vídeo aberto",
+    "momento/[id]": "Momento",
+    mensagens: "Conversas",
+    "mensagens/[id]": "Uma conversa",
+    notificacoes: "Notificações",
+    match: "Matching",
+    camera: "Câmera",
+    "editar-foto": "Editar foto",
+    "eventos/[id]": "Um evento",
+    "eventos/criar": "Criar evento",
+    "eventos/meus-ingressos": "Meus ingressos",
+    "eventos/ingresso/[id]": "Ingresso",
+    "eventos/checkin/[id]": "Check-in",
+    "perfil/configuracoes": "Configurações",
+    "perfil/editar": "Editar perfil",
+    "perfil/salvos": "Salvos",
+    "perfil/metricas": "Métricas",
+    "ler-qr": "Ler QR",
+  };
+
   const KIND = { post: "Publicação", comment: "Comentário", message: "Mensagem", user: "Usuário", vibe: "Vibe", event: "Evento" };
   const TYPES = { pessoal: "Pessoal", criador: "Criador", empresa: "Empresa", ong: "ONG" };
   const POST_TYPES = { photo: "Foto", video: "Vídeo", text: "Texto", poll: "Enquete", audio: "Áudio", carousel: "Carrossel" };
@@ -54,6 +84,8 @@
     account_type: "Tipo de conta",
     delete_user: "Conta apagada",
     broadcast: "Aviso enviado",
+    resolve_error: "Erro marcado como resolvido",
+    evidence_hold: "Guarda de prova estendida",
   };
 
   function el(tag, attrs, ...children) {
@@ -110,6 +142,7 @@
     load(currentTab);
     startLiveReports();
     if (currentTab !== "reports") loadOverviewBadge();
+    if (currentTab !== "errors") loadErrorsBadge();
   }
 
   function showLogin(msg) {
@@ -162,6 +195,7 @@
     if (tab === "users") return loadUsers($("userQuery").value.trim());
     if (tab === "notices") return loadNotices();
     if (tab === "flags") return loadFlags();
+    if (tab === "errors") return loadErrors();
     if (tab === "security") return loadAudit();
     if (tab === "history") return loadHistory();
   }
@@ -185,10 +219,50 @@
       )
     );
 
+    loadUsage();
     if (seriesErr) return;
     lastSeries = series || [];
     renderCharts();
     renderSeriesTable();
+  }
+
+  // ---------- Uso do app (D118) ----------
+  let lastUsage = null;
+  async function loadUsage() {
+    const { data, error } = await db.rpc("admin_usage", { p_days: Number($("rangeSel").value) });
+    if (error) {
+      lastUsage = null;
+      return $("usage").replaceChildren(el("div", { class: "card muted small" }, "Uso indisponível — rode a migração 0072 no Supabase."));
+    }
+    lastUsage = data;
+    renderUsage();
+  }
+
+  function renderUsage() {
+    const u = lastUsage;
+    if (!u) return;
+    const stat = (n, l) => el("div", { class: "card stat" }, el("div", { class: "n" }, typeof n === "string" ? n : fmtNum(n)), el("div", { class: "l" }, l));
+    const chartBox = el("div", { class: "card chart" },
+      el("h4", {}, "Pessoas ativas por dia"),
+      el("div", { class: "total" }, "Abriram o app pelo menos uma vez no dia"));
+    const holder = el("div");
+    chartBox.append(holder);
+    const max = Math.max(1, ...u.screens.map((s) => Number(s.views)));
+    const screensBox = el("div", { class: "card" },
+      el("h4", {}, "Telas mais abertas"),
+      el("div", { class: "total" }, "Vezes que cada tela foi aberta no período"),
+      u.screens.length
+        ? el("div", { class: "hbars" }, ...u.screens.map((s) =>
+            el("div", { class: "hbar" },
+              el("span", { class: "hbar-label", title: s.screen }, SCREENS[s.screen] || s.screen),
+              el("span", { class: "hbar-track" }, el("span", { class: "hbar-fill", style: `width:${(Number(s.views) / max) * 100}%` })),
+              el("span", { class: "hbar-n" }, fmtNum(s.views)))))
+        : el("p", { class: "muted small" }, "Ainda sem dados no período."));
+    $("usage").replaceChildren(
+      el("div", { class: "stats" }, stat(u.dau, "Ativos hoje"), stat(u.wau, "Ativos (7 dias)"), stat(u.mau, "Ativos (30 dias)"),
+        stat(u.mau ? Math.round((u.dau / u.mau) * 100) + "%" : "—", "Voltam todo dia (hoje ÷ 30 dias)")),
+      el("div", { class: "charts" }, chartBox, screensBox));
+    requestAnimationFrame(() => barChart(holder, u.series.map((r) => ({ day: r.day, v: Number(r.active) })), "Pessoas ativas por dia"));
   }
 
   function renderCharts() {
@@ -284,7 +358,11 @@
   let resizeTimer;
   window.addEventListener("resize", () => {
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => currentTab === "overview" && lastSeries.length && renderCharts(), 200);
+    resizeTimer = setTimeout(() => {
+      if (currentTab !== "overview") return;
+      if (lastSeries.length) renderCharts();
+      renderUsage();
+    }, 200);
   });
 
   function renderSeriesTable() {
@@ -302,6 +380,7 @@
     odio: "Discurso de ódio",
     violencia: "Violência ou ameaça",
     sexual: "Nudez ou conteúdo sexual",
+    intimo: "Íntimo sem consentimento",
     menor: "Segurança de menores",
     autolesao: "Suicídio ou automutilação",
     golpe: "Golpe ou fraude",
@@ -346,7 +425,8 @@
             el("div", {},
               el("span", { class: "tag" }, KIND[r.kind] || r.kind),
               el("span", { class: "tag bad" }, `${r.reports} denúncia${r.reports == 1 ? "" : "s"}`),
-              fresh ? el("span", { class: "tag lime" }, "nova") : null),
+              fresh ? el("span", { class: "tag lime" }, "nova") : null,
+              r.reasons && (r.reasons.intimo || r.reasons.menor) ? el("span", { class: "tag bad" }, "grave · fora do ar") : null),
             el("div", { class: "preview" }, r.preview || "(conteúdo já apagado)"),
             reasonTags(r.reasons),
             el("div", { class: "sub" }, `${r.owner_name || "—"} · última em ${fmtDate(r.last_report)}`)),
@@ -418,7 +498,7 @@
       return [
         authorRow(c.author, `${c.where}${c.recipient ? " com @" + String(c.recipient.handle).replace(/^@/, "") : ""} · ${fmtDate(c.created_at)}${c.deleted_at ? " · já apagada" : ""}`),
         block("Mensagem completa", fullText(c.text)),
-        c.audio_url ? block("Áudio da mensagem", el("audio", { src: c.audio_url, controls: true })) : null,
+        c.audio_url ? block("Áudio da mensagem", privateAudio(c.audio_url)) : null,
         c.shared_post ? block("Publicação compartilhada", fullText(c.shared_post.caption || JSON.stringify(c.shared_post))) : null,
         c.context && c.context.length
           ? block("Conversa em volta (a denunciada em vermelho)", el("div", { class: "ctx" },
@@ -469,8 +549,35 @@
     const counts = {};
     d.reports.forEach((r) => (counts[r.reason || "sem_categoria"] = (counts[r.reason || "sem_categoria"] || 0) + 1));
     const ownerId = d.content && d.content.author ? d.content.author.id : kind === "user" ? target : null;
+    // Provas guardadas (D121) — denúncia grave e remoção. Sem a migração 0075, some em silêncio.
+    const { data: evidence } = await db.rpc("admin_evidence_for", { p_kind: kind, p_target: target });
+    const serious = counts.intimo || counts.menor;
     $("rdBody").replaceChildren(
       block("Motivos", reasonTags(counts) || el("span", { class: "muted small" }, "—")),
+      serious
+        ? el("div", { class: "card", style: "border-color:var(--danger)" },
+            el("b", {}, "Denúncia grave — o conteúdo já saiu do ar automaticamente."),
+            el("p", { class: "small", style: "margin:6px 0 0" },
+              counts.menor
+                ? "Risco a criança ou adolescente: se houver indício de crime, remova e comunique às autoridades (ECA). "
+                : "Conteúdo íntimo sem consentimento (Marco Civil, art. 21): confirme e remova com rapidez. ",
+              counts.menor ? el("a", { href: "https://new.safernet.org.br/denuncie", target: "_blank", rel: "noopener" }, "SaferNet") : null,
+              counts.menor ? " · " : null,
+              counts.menor ? el("a", { href: "https://www.gov.br/pf/pt-br/canais_atendimento/comunicacao-de-crimes", target: "_blank", rel: "noopener" }, "Polícia Federal") : null,
+              counts.menor ? " · Disque 100" : null))
+        : null,
+      evidence && evidence.length
+        ? block("Prova preservada",
+            ...evidence.map((e) => el("div", { class: "log-line" },
+              el("span", { class: "when" }, fmtDate(e.created_at)),
+              `${e.origin === "remocao" ? "Cópia antes da remoção" : "Cópia na denúncia grave"} · guardada até ${fmtDate(e.keep_until)} `,
+              el("button", { class: "btn ghost sm", on: { click: async () => {
+                if (!confirm("Chegou pedido judicial ou policial? Guardar esta prova por mais 12 meses.")) return;
+                await rpc("admin_evidence_hold", { p_id: e.id, p_months: 12 });
+                toast("Guarda estendida.");
+                openReport(kind, target);
+              } } }, "Guardar por mais 12 meses"))))
+        : null,
       ...renderContent(kind, d.content).filter(Boolean),
       block("Cada denúncia",
         ...d.reports.map((r) => el("div", { class: "report-line" },
@@ -767,6 +874,69 @@
     );
   }
 
+  // Áudio de conversa é privado (D120): pede um link temporário (10 min).
+  // Sem a migração 0074 ainda, o endereço público continua funcionando.
+  function privateAudio(url) {
+    const audio = el("audio", { controls: true, preload: "none" });
+    const marker = "/chat-audio/";
+    const i = url.indexOf(marker);
+    if (i === -1) {
+      audio.src = url;
+      return audio;
+    }
+    db.storage.from("chat-audio").createSignedUrl(url.slice(i + marker.length), 600).then(({ data }) => {
+      audio.src = data?.signedUrl || url;
+    });
+    return audio;
+  }
+
+  // ---------- Erros (D117) ----------
+  $("errorsRange").addEventListener("change", loadErrors);
+
+  async function loadErrors() {
+    const list = $("errorList");
+    const { data, error } = await db.rpc("admin_errors", { p_days: Number($("errorsRange").value) });
+    if (error) return list.replaceChildren(el("div", { class: "card muted small" }, "Indisponível — rode a migração 0071 no Supabase."));
+    const rows = data || [];
+    setErrorsBadge(rows.filter((r) => Date.now() - new Date(r.last_at).getTime() < 86400000).length);
+    if (!rows.length) return list.replaceChildren(empty("Nenhum erro no período. ✅"));
+    list.replaceChildren(
+      ...rows.map((r) =>
+        el("div", { class: "card item" },
+          el("div", { class: "info" },
+            el("div", {},
+              el("span", { class: "tag" + (Number(r.fatal) > 0 ? " bad" : "") }, Number(r.fatal) > 0 ? "fechou o app" : r.source === "render" ? "tela" : "sem tratamento"),
+              el("span", { class: "tag" }, `${fmtNum(r.total)}×`),
+              el("span", { class: "tag" }, `${fmtNum(r.users)} pessoa${r.users == 1 ? "" : "s"}`)),
+            el("div", { class: "preview mono" }, r.message),
+            el("div", { class: "sub" },
+              `Última: ${fmtDate(r.last_at)} · primeira: ${fmtDate(r.first_at)}` +
+              (r.screen ? ` · tela ${r.screen}` : "") +
+              (r.app_version ? ` · versão ${r.app_version}` : "") +
+              (r.platform ? ` · ${r.platform}` : "")),
+            r.stack ? el("details", { class: "stack" }, el("summary", {}, "Onde aconteceu"), el("pre", {}, r.stack)) : null),
+          el("div", { class: "actions" },
+            el("button", { class: "btn ghost sm", on: { click: async () => {
+              if (!confirm("Marcar como resolvido? As ocorrências deste erro são apagadas.")) return;
+              const n = await rpc("admin_resolve_error", { p_message: r.message });
+              toast(`${fmtNum(n)} ocorrência${n == 1 ? "" : "s"} apagada${n == 1 ? "" : "s"}.`);
+              loadErrors();
+            } } }, "Resolvido")))
+      )
+    );
+  }
+
+  async function loadErrorsBadge() {
+    const { data } = await db.rpc("admin_errors", { p_days: 1 });
+    if (data) setErrorsBadge(data.length);
+  }
+
+  function setErrorsBadge(n) {
+    const b = $("errorsBadge");
+    b.hidden = !n;
+    b.textContent = n > 99 ? "99+" : String(n);
+  }
+
   // ---------- Segurança ----------
   async function loadAudit() {
     const rows = await rpc("admin_security_audit");
@@ -788,6 +958,7 @@
     if (action === "ban") return `Suspensão de ${d.days >= 36500 ? "tempo indeterminado" : d.days + " dia(s)"}`;
     if (action === "account_type") return `Tipo de conta → ${TYPES[d.type] || d.type}`;
     if (action === "broadcast") return `Aviso: "${d.text || ""}"`;
+    if (action === "resolve_error") return `Erro resolvido (${fmtNum(d.count)}×) — "${d.message || ""}"`;
     if (action.startsWith("remove:")) return `Removeu ${KIND[action.slice(7)] || action.slice(7)}${d.preview ? ` — "${d.preview}"` : ""}`;
     if (action.startsWith("dismiss:")) return `Manteve ${KIND[action.slice(8)] || action.slice(8)} (denúncias limpas)`;
     return ACTIONS[action] || action;
