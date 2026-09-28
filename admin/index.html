@@ -68,7 +68,11 @@
 
       <section data-panel="reports" hidden>
         <div class="head"><h2>Denúncias</h2><button class="btn ghost sm" data-reload="reports">Atualizar</button></div>
-        <p class="muted">Mais denunciado primeiro. <b>Manter</b> limpa as denúncias; <b>Remover</b> apaga o conteúdo (usuário: suspensão de 30 dias).</p>
+        <p class="muted">Mais denunciado primeiro. Abra <b>Ver na íntegra</b> pra conferir o conteúdo e o motivo de cada denúncia. <b>Manter</b> limpa as denúncias; <b>Remover</b> apaga o conteúdo (pessoa: suspensão de 30 dias). Denúncia nova aparece aqui na hora, com aviso sonoro.</p>
+        <div class="row-between" style="margin-top:8px">
+          <label class="switch-label small"><span class="switch"><input type="checkbox" id="soundOn" checked /><span></span></span> Som ao chegar denúncia</label>
+          <button class="btn ghost sm" id="notifyPerm" hidden>Avisar também fora da aba</button>
+        </div>
         <div id="reportList" class="list"></div>
       </section>
 
@@ -132,6 +136,17 @@
       </section>
     </main>
   </div>
+
+  <dialog id="reportDialog" aria-labelledby="rdTitle">
+    <div class="dlg-head">
+      <div>
+        <h2 id="rdTitle">Denúncia</h2>
+        <div class="muted" id="rdSub"></div>
+      </div>
+      <button class="btn ghost sm" id="rdClose" aria-label="Fechar">Fechar</button>
+    </div>
+    <div id="rdBody"></div>
+  </dialog>
 
   <dialog id="userDialog" aria-labelledby="udName">
     <div class="dlg-head">

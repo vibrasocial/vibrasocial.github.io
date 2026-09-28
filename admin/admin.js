@@ -108,6 +108,8 @@
     $("login").hidden = true;
     $("app").hidden = false;
     load(currentTab);
+    startLiveReports();
+    if (currentTab !== "reports") loadOverviewBadge();
   }
 
   function showLogin(msg) {
@@ -182,9 +184,7 @@
           el("div", { class: "l" }, label))
       )
     );
-    const badge = $("reportsBadge");
-    badge.hidden = !(s.reports_open > 0);
-    badge.textContent = String(s.reports_open || "");
+
     if (seriesErr) return;
     lastSeries = series || [];
     renderCharts();
@@ -295,35 +295,248 @@
     $("seriesTable").replaceChildren(el("table", {}, el("thead", {}, head), el("tbody", {}, ...rows)));
   }
 
-  // ---------- Denúncias ----------
+  // ---------- Denúncias (D116: categoria, ficha na íntegra, aviso ao vivo) ----------
+  const REASONS = {
+    spam: "Spam ou propaganda",
+    assedio: "Assédio ou bullying",
+    odio: "Discurso de ódio",
+    violencia: "Violência ou ameaça",
+    sexual: "Nudez ou conteúdo sexual",
+    menor: "Segurança de menores",
+    autolesao: "Suicídio ou automutilação",
+    golpe: "Golpe ou fraude",
+    falso: "Informação falsa",
+    direitos: "Direitos autorais",
+    perfil_falso: "Perfil falso",
+    outro: "Outro motivo",
+    sem_categoria: "Sem categoria",
+  };
+  const reasonLabel = (k) => REASONS[k || "sem_categoria"] || k;
+  const freshTargets = new Set();
+
+  function reasonTags(reasons) {
+    const entries = Object.entries(reasons || {}).sort((a, b) => b[1] - a[1]);
+    if (!entries.length) return null;
+    return el("div", { class: "reason-tags" },
+      ...entries.map(([k, n]) => el("span", { class: "tag reason" }, reasonLabel(k), n > 1 ? el("b", {}, "×" + n) : null)));
+  }
+
+  async function resolveReport(kind, target, action) {
+    const msg = action === "remove"
+      ? (kind === "user" ? "Suspender esta pessoa por 30 dias?" : "Apagar este conteúdo de vez?")
+      : "Manter o conteúdo e limpar as denúncias?";
+    if (!confirm(msg)) return false;
+    await rpc("admin_resolve_report", { p_kind: kind, p_target: target, p_action: action });
+    toast(action === "remove" ? "Removido." : "Denúncias limpas.");
+    loadReports();
+    loadOverviewBadge();
+    return true;
+  }
+
   async function loadReports() {
     const rows = await rpc("admin_reports");
     const list = $("reportList");
+    setReportsBadge(rows.length);
     if (!rows.length) return list.replaceChildren(empty("Nenhuma denúncia aberta. 🎉"));
     list.replaceChildren(
       ...rows.map((r) => {
-        const act = (action) => async () => {
-          const msg = action === "remove"
-            ? (r.kind === "user" ? "Suspender este usuário por 30 dias?" : "Apagar este conteúdo de vez?")
-            : "Manter e limpar as denúncias?";
-          if (!confirm(msg)) return;
-          await rpc("admin_resolve_report", { p_kind: r.kind, p_target: r.target_id, p_action: action });
-          toast(action === "remove" ? "Removido." : "Denúncias limpas.");
-          loadReports();
-        };
-        return el("div", { class: "card item" },
+        const fresh = freshTargets.has(r.kind + ":" + r.target_id);
+        return el("div", { class: "card item" + (fresh ? " fresh" : "") },
           el("div", { class: "info" },
             el("div", {},
               el("span", { class: "tag" }, KIND[r.kind] || r.kind),
-              el("span", { class: "tag bad" }, `${r.reports} denúncia${r.reports == 1 ? "" : "s"}`)),
+              el("span", { class: "tag bad" }, `${r.reports} denúncia${r.reports == 1 ? "" : "s"}`),
+              fresh ? el("span", { class: "tag lime" }, "nova") : null),
             el("div", { class: "preview" }, r.preview || "(conteúdo já apagado)"),
+            reasonTags(r.reasons),
             el("div", { class: "sub" }, `${r.owner_name || "—"} · última em ${fmtDate(r.last_report)}`)),
           el("div", { class: "actions" },
-            r.owner_id ? el("button", { class: "btn ghost sm", on: { click: () => openUser(r.owner_id) } }, "Ver autor") : null,
-            el("button", { class: "btn ghost sm", on: { click: act("dismiss") } }, "Manter"),
-            el("button", { class: "btn danger sm", on: { click: act("remove") } }, r.kind === "user" ? "Suspender 30d" : "Remover")));
+            el("button", { class: "btn sm", on: { click: () => openReport(r.kind, r.target_id) } }, "Ver na íntegra"),
+            el("button", { class: "btn ghost sm", on: { click: () => resolveReport(r.kind, r.target_id, "dismiss") } }, "Manter"),
+            el("button", { class: "btn danger sm", on: { click: () => resolveReport(r.kind, r.target_id, "remove") } }, r.kind === "user" ? "Suspender 30d" : "Remover")));
       })
     );
+  }
+
+  function setReportsBadge(n) {
+    const badge = $("reportsBadge");
+    badge.hidden = !(n > 0);
+    badge.textContent = String(n || "");
+  }
+  async function loadOverviewBadge() {
+    const { data } = await db.rpc("admin_reports");
+    if (data) setReportsBadge(data.length);
+  }
+
+  // Ficha da denúncia (diálogo): conteúdo NA ÍNTEGRA + cada denúncia.
+  const rdlg = $("reportDialog");
+  $("rdClose").addEventListener("click", () => rdlg.close());
+  rdlg.addEventListener("click", (e) => e.target === rdlg && rdlg.close());
+
+  function mediaGrid(urls) {
+    const list = (urls || []).filter(Boolean);
+    if (!list.length) return null;
+    return el("div", { class: "media" },
+      ...list.map((u) => /\.(mp4|mov|webm|m4v)(\?|$)/i.test(u)
+        ? el("video", { src: u, controls: true, preload: "metadata" })
+        : el("a", { href: u, target: "_blank", rel: "noopener" }, el("img", { src: u, alt: "Imagem denunciada", loading: "lazy" }))));
+  }
+  function authorRow(a, label) {
+    if (!a) return null;
+    return el("div", { class: "author-row" },
+      a.avatar_url ? el("img", { src: a.avatar_url, alt: "" }) : el("div", { class: "thumb ph", style: "width:36px;height:36px;border-radius:50%" }, "?"),
+      el("div", {},
+        el("div", { class: "title" }, a.name || "—", " ", el("span", { class: "muted" }, "@" + String(a.handle || "").replace(/^@/, ""))),
+        label ? el("div", { class: "sub" }, label) : null),
+      a.id ? el("button", { class: "btn ghost sm", style: "margin-left:auto", on: { click: () => { rdlg.close(); openUser(a.id); } } }, "Ficha") : null);
+  }
+  const block = (title, ...children) => el("div", { class: "evidence" }, el("h3", {}, title), ...children);
+  const fullText = (t) => el("div", { class: "fulltext" }, t || "(sem texto)");
+
+  function renderContent(kind, c) {
+    if (!c) return [el("p", { class: "muted" }, "O conteúdo já foi apagado — só restaram as denúncias.")];
+    if (kind === "post") {
+      const media = c.type === "carousel" ? c.carousel_urls : [c.media_url, c.cover_url];
+      return [
+        authorRow(c.author, `Publicação · ${POST_TYPES[c.type] || c.type} · ${fmtDate(c.created_at)} · público: ${c.audience}${c.location_name ? " · 📍 " + c.location_name : ""}`),
+        block("Legenda completa", fullText(c.caption)),
+        c.type === "audio" && c.media_url ? block("Áudio", el("audio", { src: c.media_url, controls: true })) : null,
+        mediaGrid(c.type === "audio" ? [c.cover_url] : media),
+        c.poll && c.poll.options ? block("Enquete", el("ul", {}, ...c.poll.options.map((o) => el("li", {}, o.label)))) : null,
+        el("p", { class: "muted small" }, `${fmtNum(c.likes)} curtidas · ${fmtNum(c.comments)} comentários`),
+      ];
+    }
+    if (kind === "comment") {
+      return [
+        authorRow(c.author, `Comentário · ${fmtDate(c.created_at)}${c.edited_at ? " · editado" : ""}`),
+        block("Comentário completo", fullText(c.text)),
+        c.parent_text ? block("Em resposta a", fullText(c.parent_text)) : null,
+        c.post ? block(`Na publicação de @${String(c.post.author_handle || "").replace(/^@/, "")}`, fullText(c.post.caption), mediaGrid([c.post.media_url])) : null,
+      ];
+    }
+    if (kind === "message") {
+      return [
+        authorRow(c.author, `${c.where}${c.recipient ? " com @" + String(c.recipient.handle).replace(/^@/, "") : ""} · ${fmtDate(c.created_at)}${c.deleted_at ? " · já apagada" : ""}`),
+        block("Mensagem completa", fullText(c.text)),
+        c.audio_url ? block("Áudio da mensagem", el("audio", { src: c.audio_url, controls: true })) : null,
+        c.shared_post ? block("Publicação compartilhada", fullText(c.shared_post.caption || JSON.stringify(c.shared_post))) : null,
+        c.context && c.context.length
+          ? block("Conversa em volta (a denunciada em vermelho)", el("div", { class: "ctx" },
+              ...c.context.map((m) => el("div", { class: "msg" + (m.reported ? " hit" : "") },
+                el("small", {}, `@${String(m.sender || "").replace(/^@/, "")} · ${fmtDate(m.created_at)}`),
+                m.audio ? "🎤 (áudio) " : "", m.text || ""))))
+          : null,
+      ];
+    }
+    if (kind === "user") {
+      return [
+        authorRow({ id: c.id, name: c.name, handle: c.handle, avatar_url: c.avatar_url }, `Perfil · ${TYPES[c.account_type] || c.account_type} · desde ${fmtDate(c.created_at)}`),
+        c.cover_url ? mediaGrid([c.cover_url]) : null,
+        block("Bio", fullText(c.bio)),
+        c.status ? block("Status", fullText(c.status)) : null,
+        c.links && c.links.length ? block("Links", el("ul", {}, ...c.links.map((l) => el("li", {}, `${l.label || "Link"}: `, el("a", { href: l.url, target: "_blank", rel: "noopener noreferrer" }, l.url))))) : null,
+        c.recent_posts && c.recent_posts.length
+          ? block("Publicações recentes", mediaGrid(c.recent_posts.map((p) => p.media_url)),
+              el("div", {}, ...c.recent_posts.map((p) => el("div", { class: "log-line" }, el("span", { class: "when" }, fmtDate(p.created_at)), p.caption || "(sem legenda)"))))
+          : null,
+      ];
+    }
+    if (kind === "vibe") {
+      return [
+        authorRow(c.author, `Vibe criada em ${fmtDate(c.created_at)} · ${fmtNum(c.members)} membros${c.is_private ? " · privada" : ""}`),
+        c.cover_url ? mediaGrid([c.cover_url]) : null,
+        block(c.name, fullText(c.description)),
+        c.recent_posts && c.recent_posts.length
+          ? block("Publicações recentes na Vibe", mediaGrid(c.recent_posts.map((p) => p.media_url)),
+              el("div", {}, ...c.recent_posts.map((p) => el("div", { class: "log-line" }, el("span", { class: "when" }, fmtDate(p.created_at)), p.caption || "(sem legenda)"))))
+          : null,
+      ];
+    }
+    if (kind === "event") {
+      return [
+        authorRow(c.author, `Evento · ${fmtDate(c.starts_at)}${c.location ? " · " + c.location : ""}${c.cancelled_at ? " · cancelado" : ""}`),
+        c.cover_url ? mediaGrid([c.cover_url]) : null,
+        block(c.title, fullText(c.description)),
+      ];
+    }
+    return [el("pre", {}, JSON.stringify(c, null, 2))];
+  }
+
+  async function openReport(kind, target) {
+    const d = await rpc("admin_report_detail", { p_kind: kind, p_target: target });
+    $("rdTitle").textContent = `${KIND[kind] || kind} denunciad${kind === "user" || kind === "event" || kind === "comment" ? "o" : "a"}`;
+    $("rdSub").textContent = `${d.reports.length} denúncia${d.reports.length === 1 ? "" : "s"}`;
+    const counts = {};
+    d.reports.forEach((r) => (counts[r.reason || "sem_categoria"] = (counts[r.reason || "sem_categoria"] || 0) + 1));
+    const ownerId = d.content && d.content.author ? d.content.author.id : kind === "user" ? target : null;
+    $("rdBody").replaceChildren(
+      block("Motivos", reasonTags(counts) || el("span", { class: "muted small" }, "—")),
+      ...renderContent(kind, d.content).filter(Boolean),
+      block("Cada denúncia",
+        ...d.reports.map((r) => el("div", { class: "report-line" },
+          el("span", { class: "tag reason" }, reasonLabel(r.reason)),
+          el("span", { class: "who" }, ` por ${r.reporter_name || "—"} @${String(r.reporter_handle || "").replace(/^@/, "")} · ${fmtDate(r.created_at)}`),
+          r.details ? el("div", { class: "details" }, r.details) : null))),
+      el("div", { class: "dlg-actions" },
+        ownerId ? el("button", { class: "btn ghost sm", on: { click: () => { rdlg.close(); openUser(ownerId); } } }, kind === "user" ? "Abrir ficha" : "Ficha do autor") : null,
+        el("button", { class: "btn ghost sm", on: { click: async () => { if (await resolveReport(kind, target, "dismiss")) rdlg.close(); } } }, "Manter (limpar denúncias)"),
+        el("button", { class: "btn danger sm", on: { click: async () => { if (await resolveReport(kind, target, "remove")) rdlg.close(); } } }, kind === "user" ? "Suspender 30 dias" : "Remover conteúdo"))
+    );
+    freshTargets.delete(kind + ":" + target);
+    if (!rdlg.open) rdlg.showModal();
+  }
+
+  // Aviso ao vivo: a fila `report_feed` só o admin lê (0070).
+  let feedChannel = null;
+  let titleTimer = null;
+  const baseTitle = document.title;
+  function beep() {
+    if (!$("soundOn").checked) return;
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      [0, 0.18].forEach((t0) => {
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.type = "sine"; o.frequency.value = 880;
+        g.gain.setValueAtTime(0.0001, ctx.currentTime + t0);
+        g.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + t0 + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + t0 + 0.15);
+        o.connect(g).connect(ctx.destination);
+        o.start(ctx.currentTime + t0); o.stop(ctx.currentTime + t0 + 0.16);
+      });
+    } catch {}
+  }
+  function alarm(row) {
+    const label = `Nova denúncia: ${reasonLabel(row.reason)} (${(KIND[row.kind] || row.kind).toLowerCase()})`;
+    freshTargets.add(row.kind + ":" + row.target_id);
+    const tab = document.querySelector('#tabs button[data-tab="reports"]');
+    tab.classList.remove("alarm"); void tab.offsetWidth; tab.classList.add("alarm");
+    toast(label);
+    beep();
+    let on = false, n = 0;
+    clearInterval(titleTimer);
+    titleTimer = setInterval(() => {
+      document.title = (on = !on) ? "🔴 " + label : baseTitle;
+      if (++n > 12) { clearInterval(titleTimer); document.title = baseTitle; }
+    }, 700);
+    if ("Notification" in window && Notification.permission === "granted" && document.hidden) {
+      try { new Notification("Vibra Admin", { body: label, icon: "/icon.png" }); } catch {}
+    }
+    if (currentTab === "reports") loadReports();
+    else loadOverviewBadge();
+  }
+  function startLiveReports() {
+    if (feedChannel) return;
+    feedChannel = db.channel("report-feed")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "report_feed" }, (p) => alarm(p.new))
+      .subscribe();
+    if ("Notification" in window && Notification.permission === "default") {
+      const b = $("notifyPerm");
+      b.hidden = false;
+      b.addEventListener("click", async () => {
+        await Notification.requestPermission();
+        b.hidden = true;
+      });
+    }
   }
 
   // ---------- Conteúdo ----------
@@ -596,7 +809,11 @@
   }
 
   db.auth.onAuthStateChange((event) => {
-    if (event === "SIGNED_OUT") showLogin();
+    if (event === "SIGNED_OUT") {
+      if (feedChannel) db.removeChannel(feedChannel);
+      feedChannel = null;
+      showLogin();
+    }
   });
   boot();
 })();

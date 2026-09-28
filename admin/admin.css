@@ -129,3 +129,28 @@ code { font-size: 13px; }
   .kv { grid-template-columns: 1fr; }
   .kv dt { margin-top: 6px; }
 }
+
+/* Denúncia chegando (D116) — a aba pisca e o item novo brilha. */
+@keyframes alarm { 0%, 100% { background: transparent; color: #cfd8f0; } 50% { background: #e53935; color: #fff; } }
+nav button.alarm { animation: alarm .7s ease-in-out 6; }
+@keyframes glow { 0% { box-shadow: 0 0 0 3px #e5393599; } 100% { box-shadow: 0 0 0 0 transparent; } }
+.card.fresh { animation: glow 2.4s ease-out 2; border-color: var(--danger); }
+.reason-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.tag.reason { background: #e539351a; color: var(--danger); text-transform: none; font-size: 12px; }
+.tag.reason b { margin-left: 4px; }
+.evidence { margin-top: 12px; }
+.media { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin: 10px 0; }
+.media img, .media video { width: 100%; border-radius: 10px; background: var(--border); display: block; }
+.media img { aspect-ratio: 1; object-fit: cover; cursor: zoom-in; }
+.evidence .fulltext { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 15px; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
+.evidence audio { width: 100%; margin: 8px 0; }
+.ctx { display: grid; gap: 6px; margin-top: 8px; }
+.ctx .msg { padding: 8px 10px; border-radius: 10px; background: var(--card); border: 1px solid var(--border); font-size: 14px; }
+.ctx .msg.hit { border: 2px solid var(--danger); background: #e5393512; }
+.ctx .msg small { color: var(--muted); display: block; font-size: 11px; }
+.report-line { padding: 10px 0; border-bottom: 1px solid var(--border); }
+.report-line .who { color: var(--muted); font-size: 12px; }
+.report-line .details { margin-top: 4px; font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.author-row { display: flex; align-items: center; gap: 10px; }
+.author-row img { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; background: var(--border); }
+.dlg-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; position: sticky; bottom: -20px; background: var(--bg); padding: 12px 0; border-top: 1px solid var(--border); }
