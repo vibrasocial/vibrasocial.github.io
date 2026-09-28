@@ -30,9 +30,8 @@ a { color: inherit; }
 .center { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; }
 .box { width: 100%; max-width: 420px; text-align: center; }
 .logo {
-  width: 72px; height: 72px; border-radius: 20px; margin: 0 auto 16px;
-  background: var(--lime); color: var(--navy);
-  display: grid; place-items: center; font-weight: 800; font-size: 34px;
+  width: 88px; height: 88px; border-radius: 22px; margin: 0 auto 16px; display: block;
+  box-shadow: 0 6px 20px rgba(0, 39, 118, .18);
 }
 h1 { font-size: 26px; margin: 0 0 8px; letter-spacing: -0.02em; }
 p.muted, .muted { color: var(--muted); }
